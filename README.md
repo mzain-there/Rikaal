@@ -27,31 +27,47 @@ The **ingest + search** loop runs with zero AWS. You only need Bedrock for
 ## Run it locally (≈15 min)
 
 ### 1. Start Qdrant
+
+#### Option A — Manual Qdrant
+
+Rikaal uses Qdrant as its vector database.
+
+The setup has been tested with Qdrant:
+
+- Qdrant server: `v1.11.2`
+- Python client: `qdrant-client==1.11.2`
+- Embedding model: `sentence-transformers/all-MiniLM-L6-v2`
+
+You can run Qdrant using either Docker or a standalone binary.
+
+#### Option B — Docker 
+
+If Docker is installed, start Qdrant with:
+
 ```bash
 docker compose up -d
 ```
 
-### 2. Set up Python
+### 2.Set up Python
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Configure
-```bash
-cp .env.example .env
-# Edit .env later for Bedrock. Not needed for ingest/search.
-```
+### 3. Start the API
 
-### 4. Start the API
 ```bash
-uvicorn app.main:app --reload
+uvicorn apps.backend.main:app --reload
 ```
 Open http://localhost:8000/docs for the interactive API.
 
----
+### 4. Health Check
 
-## Try the loop (no AWS needed)
+Open http://localhost:8000/docs and try out GET/ to check status.
+
+
+## 5. Try the loop (no AWS needed)
 
 ```bash
 # Store a project decision

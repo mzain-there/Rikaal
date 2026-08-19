@@ -18,5 +18,14 @@ def chunk_text(text: str, max_chars: int = 1000, overlap: int = 150) -> list[str
                 end = start + idx + len(sep)
                 break
         chunks.append(text[start:end].strip())
-        start = max(end - overlap, end) if end <= start else end - overlap
+
+        if end >= len(text):
+            break
+
+        start = end - overlap
+
+        # Move the start forward to the next word boundary.
+        while start < len(text) and not text[start].isspace():
+            start += 1
+            
     return [c for c in chunks if c]

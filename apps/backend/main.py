@@ -10,6 +10,7 @@ Endpoints:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 from .vectordb import ensure_collection, add_chunks, search as vsearch
 from .ingest import chunk_text
@@ -21,10 +22,17 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-def _startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     ensure_collection()
+    yield
 
+
+app = FastAPI(
+    title="Rikaal",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 # ---------- models ----------
 class IngestReq(BaseModel):

@@ -41,12 +41,13 @@ def search(query: str, top_k: int = 5, project: str | None = None) -> list[dict]
         qfilter = Filter(
             must=[FieldCondition(key="project", match=MatchValue(value=project))]
         )
-    hits = _client.search(
-        collection_name=COLLECTION_NAME,
-        query_vector=embed_one(query),
-        limit=top_k,
-        query_filter=qfilter,
+    result = _client.query_points(
+    collection_name=COLLECTION_NAME,
+    query=embed_one(query),
+    limit=top_k,
+    query_filter=qfilter,
     )
+    hits = result.points
     return [
         {"text": h.payload.get("text", ""), "score": h.score, "payload": h.payload}
         for h in hits
