@@ -33,6 +33,26 @@ def add_chunks(chunks: list[str], metadata: dict | None = None) -> int:
     _client.upsert(collection_name=COLLECTION_NAME, points=points)
     return len(points)
 
+    
+def delete_by_repo(project: str, repo: str) -> None:
+    """Delete all chunks belonging to a specific project and GitHub repo."""
+    qfilter = Filter(
+        must=[
+            FieldCondition(
+                key="project",
+                match=MatchValue(value=project),
+            ),
+            FieldCondition(
+                key="repo",
+                match=MatchValue(value=repo),
+            ),
+        ]
+    )
+
+    _client.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=qfilter,
+    )
 
 def search(query: str, top_k: int = 5, project: str | None = None) -> list[dict]:
     """Return the top_k most relevant chunks, optionally scoped to a project."""

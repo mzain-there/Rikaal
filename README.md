@@ -104,3 +104,107 @@ You'll get the decision back, ranked by relevance. That's the core working.
 5. **Shared knowledge bases** — multi-user project scoping (your team-sharing moat).
 
 Ship #1 and #2 before anything else.
+
+## GitHub Ingestion:
+
+Rikaal can ingest knowledge from a GitHub repository directly into the knowledge base.
+
+The GitHub ingestion endpoint pulls:
+
+1.README.md from the repository root
+2.Every .md file under docs/
+3.Files larger than approximately 100 KB are skipped
+
+Source code and Markdown files outside the root README and docs/ are not ingested.
+
+## Configure GitHub Token:
+
+Public repositories work without authentication.
+For authenticated GitHub API requests, optionally add a GitHub Personal Access Token to .env:
+# GITHUB_TOKEN=your_github_token
+The token should have the required repository access with Contents → Read-only permission.
+
+Add the variable to .env.example without a real token:
+# GITHUB_TOKEN=
+Never commit the actual token or .env file.
+
+## Ingest a GitHub Repository:
+
+Start the FastApi before and follow through http://localhost:8000/docs
+
+POST /ingest/github
+
+```json
+{
+  "repo": "owner/name",
+  "branch": "main",
+  "project": "default"
+}
+```
+
+For Example:
+```bash
+curl -X POST localhost:8000/ingest/github \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "repo": "owner/name",
+    "branch": "main",
+    "project": "default"
+  }'
+```
+
+## Response:
+
+The endpoint returns the files that were ingested and the number of chunks generated from each file:
+```json
+{
+  "repo": "owner/name",
+  "files": [
+    {
+      "path": "README.md",
+      "chunks": 4
+    },
+    {
+      "path": "docs/architecture.md",
+      "chunks": 3
+    }
+  ],
+  "total_chunks": 7
+}
+```
+Each chunk stores metadata for:
+
+1.source: "github"
+2.Project
+3.repo
+4.path
+
+This allows search results to show where the retrieved knowledge came from.
+
+## Re-ingestion:
+Re-ingesting the same repository for the same project does not create duplicate chunks.
+
+Before inserting new content, Rikaal removes the existing chunks for that project + repo combination and then ingests the latest content.
+
+## Search Ingested Knowledge:
+
+After ingestion, use the existing /search endpoint to retrieve knowledge from the repository:
+```json
+{
+  "query": "why did we choose local embeddings",
+  "project": "rikaal"
+}
+```
+The search results include the repository and file path so the source of the retrieved knowledge is clear.
+
+### Error handling:
+
+GitHub ingestion reports clear errors for:
+
+1.Invalid repository names
+2.Invalid or missing branches
+3.Repositories that cannot be accessed
+4.Repositories with no eligible Markdown files
+5.Files exceeding approximately 100 KB
+
+Private repositories are not part of the current ingestion scope, but an optional GITHUB_TOKEN is supported for authenticated GitHub API requests.

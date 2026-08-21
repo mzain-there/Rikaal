@@ -2,18 +2,20 @@
 Rikaal API — the pre-flight knowledge layer for code agents.
 
 Endpoints:
-  POST /ingest    store project knowledge (docs, decisions, notes)
-  POST /search    retrieve the most relevant chunks (no LLM)
-  POST /chat      brainstorm with retrieved project context (uses Bedrock)
-  POST /finalize  turn a brainstorm into a structured prompt for a coding agent
+  POST /ingest           store project knowledge (docs, decisions, notes)
+  POST /ingest/github    ingest README.md and docs/ from a public GitHub repo
+  POST /search           retrieve the most relevant chunks (no LLM)
+  POST /chat             brainstorm with retrieved project context (uses Bedrock)
+  POST /finalize         turn a brainstorm into a structured prompt for a coding agent
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from .vectordb import ensure_collection, add_chunks, search as vsearch
+from .vectordb import ensure_collection, add_chunks, search as vsearch, delete_by_repo
 from .ingest import chunk_text
+from .github import get_repo_tree, get_file_content, select_markdown_files, is_file_too_large
 from . import llm
 
 app = FastAPI(title="Rikaal", version="0.1.0")
@@ -41,6 +43,10 @@ class IngestReq(BaseModel):
     source: str = "manual"      # manual | github | jira | slack | brainstorm
     title: str | None = None
 
+class GitHubIngestReq(BaseModel):
+    repo: str
+    branch: str = "main"
+    project: str = "default"
 
 class SearchReq(BaseModel):
     query: str
@@ -75,6 +81,78 @@ def ingest(req: IngestReq):
     n = add_chunks(chunks, meta)
     return {"ingested_chunks": n, "project": req.project}
 
+@app.post("/ingest/github")
+def ingest_github(req: GitHubIngestReq):
+    try:
+        tree = get_repo_tree(req.repo, req.branch)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    selected_files = select_markdown_files(tree)
+
+    if not selected_files:
+        raise HTTPException(
+            status_code=400,
+            detail="No README.md or Markdown files under docs/ were found in this repository.",
+        )
+
+    # Remove previous ingestion for this project/repository combination.
+    delete_by_repo(req.project, req.repo)
+
+    files = []
+    skipped = []
+    total_chunks = 0
+
+    for file_info in selected_files:
+        path = file_info["path"]
+        size = file_info["size"]
+
+        if is_file_too_large(size):
+            skipped.append(
+                {
+                    "path": path,
+                    "reason": "File is larger than 100 KB",
+                }
+            )
+            continue
+
+        try:
+            text = get_file_content(req.repo, path, req.branch)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        chunks = chunk_text(text)
+
+        metadata = {
+            "source": "github",
+            "project": req.project,
+            "repo": req.repo,
+            "path": path,
+        }
+
+        chunk_count = add_chunks(chunks, metadata)
+
+        files.append(
+            {
+                "path": path,
+                "chunks": chunk_count,
+            }
+        )
+
+        total_chunks += chunk_count
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="All selected Markdown files were larger than 100 KB; nothing was ingested.",
+        )
+
+    return {
+        "repo": req.repo,
+        "files": files,
+        "skipped": skipped,
+        "total_chunks": total_chunks,
+    }
 
 @app.post("/search")
 def search(req: SearchReq):

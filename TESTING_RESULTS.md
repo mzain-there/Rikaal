@@ -7,6 +7,7 @@ API, Qdrant integration, ingestion, semantic search, project scoping, and
 chunking behavior.
 
 ---
+## Ticket 3:
 
 ## 1. Qdrant
 
@@ -174,3 +175,109 @@ uvicorn apps.backend.main:app --reload
 Qdrant setup information was also updated to reflect the tested setup.
 
 Result: UPDATED
+
+## Ticket 5 — GitHub Ingestion Testing
+
+## 1. Endpoint
+
+Tested the new:
+
+POST /ingest/github
+
+Request format:
+```json
+{
+  "repo": "owner/name",
+  "branch": "main",
+  "project": "default"
+}
+```
+
+### 2. Public Repository Test
+
+Verified GitHub repository ingestion using a public repository.
+
+The endpoint:
+
+1.Connects to the GitHub REST API using httpx
+2.Lists repository files using the Git tree API
+3.Selects only the root README.md and .md files under docs/
+4.Fetches the selected file contents
+5.Processes the content through the existing chunk_text and add_chunks pipeline
+6.Stores the resulting chunks in Qdrant
+
+Expected file selection:
+
+README.md                 ✓ Ingested
+docs/architecture.md     ✓ Ingested
+docs/setup.md            ✓ Ingested
+
+Result: No README or Markdown files under docs were found.
+
+## 4. Chunk Metadata:
+
+Verified that ingested chunks contain the required metadata:
+
+1.source: github
+2.project: <StrideWeek>
+3.repo: <mzain-there/StrideWeek>
+4.path: <file path>
+
+This allows /search results to identify which repository and file the knowledge came from.
+
+## 5. Re-ingestion / Duplicate Prevention:
+
+Ingested the same repository twice using the same project.
+
+First ingestion
+Total chunks: 11
+Second ingestion
+Total chunks: 11
+
+The Qdrant chunk count remained the same after the second ingestion.
+
+This confirms that re-ingestion does not create duplicate chunks for the same project + repo combination.
+
+## 6. Search Verification:
+
+After ingestion, tested /search using:
+
+{
+  "query": "StrideWeeek use for what?",
+  "project": "StridWeek"
+}
+
+Verified that the search response returns the relevant repository knowledge and includes the source file path.
+
+## 7. GitHub Token:
+
+Configured an optional GITHUB_TOKEN through .env for authenticated GitHub API requests.
+
+The token is not committed to the repository.
+
+.env.example contains only:
+# GITHUB_TOKEN= your_github_token_here
+
+## 8. Error Handling:
+
+Verified handling for:
+
+1.Invalid repository
+2.Invalid branch
+3.Repository with no eligible Markdown files
+4.Oversized Markdown files
+
+The endpoint returns a clear error/message instead of silently returning a successful response with zero chunks.
+
+## 9. Final Verification:
+
+Ticket 5 final verification:
+
+Repository: mzain-there/rikaal
+Project: rikaal
+Search query: "why did we choose local embeddings"
+
+Expected result:
+
+Relevant content from the Rikaal README is returned.
+The response identifies the source file/path.
